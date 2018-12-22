@@ -3,9 +3,11 @@ import hmac, base64
 from django import forms
 from django.conf import settings
 
+
 class Form(forms.Form):
     pass
-    
+
+
 class ModelForm(forms.ModelForm):
     """
     Subclass of `forms.ModelForm` which makes sure
@@ -14,6 +16,7 @@ class ModelForm(forms.ModelForm):
     for the form to actually validate. Django does not
     do this on its own, which is really annoying.
     """
+
     def merge_from_initial(self):
         self.data._mutable = True
         filt = lambda v: v not in self.data.keys()
@@ -50,13 +53,13 @@ class OAuthAuthenticationForm(forms.Form):
     @staticmethod
     def get_csrf_signature(key, token):
         # Check signature...
-        try:
-            import hashlib # 2.5
-            hashed = hmac.new(key, token, hashlib.sha1)
-        except:
-            import sha # deprecated
-            hashed = hmac.new(key, token, sha)
+        import hashlib  # 2.5
+        # PY3: hmac doesn't work with str
+        key = key.encode('ascii')
+        token = token.encode('ascii')
+        hashed = hmac.new(key, token, hashlib.sha1)
 
-        # calculate the digest base 64
-        return base64.b64encode(hashed.digest())
-
+        # calculate the digest base 64 (PY3: returns bytes)
+        signature = base64.b64encode(hashed.digest())
+        # PY3: decode to get str
+        return signature.decode('ascii')

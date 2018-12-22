@@ -1,6 +1,8 @@
+from six import add_metaclass
+
 import warnings
 
-from utils import rc
+from .utils import rc
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.conf import settings
 
@@ -16,7 +18,7 @@ class HandlerMetaClass(type):
         new_cls = type.__new__(cls, name, bases, attrs)
 
         def already_registered(model, anon):
-            for k, (m, a) in typemapper.iteritems():
+            for k, (m, a) in typemapper.items():
                 if model == m and anon == a:
                     return k
 
@@ -35,6 +37,7 @@ class HandlerMetaClass(type):
 
         return new_cls
 
+@add_metaclass(HandlerMetaClass)
 class BaseHandler(object):
     """
     Basehandler that gives you CRUD for free.
@@ -45,7 +48,6 @@ class BaseHandler(object):
     receive a request as the first argument from the
     resource. Use this for checking `request.user`, etc.
     """
-    __metaclass__ = HandlerMetaClass
 
     allowed_methods = ('GET', 'POST', 'PUT', 'DELETE')
     anonymous = is_anonymous = False
@@ -127,7 +129,7 @@ class BaseHandler(object):
             return rc.BAD_REQUEST
 
         attrs = self.flatten_dict(request.data)
-        for k,v in attrs.iteritems():
+        for k,v in attrs.items():
             setattr( inst, k, v )
 
         inst.save()

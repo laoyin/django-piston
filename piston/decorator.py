@@ -54,9 +54,9 @@ def getinfo(func):
     signature = inspect.formatargspec(regargs, varargs, varkwargs, defaults,
                                       formatvalue=lambda value: "")[1:-1]
     return dict(name=func.__name__, argnames=argnames, signature=signature,
-                defaults = func.func_defaults, doc=func.__doc__,
+                defaults = func.__defaults__, doc=func.__doc__,
                 module=func.__module__, dict=func.__dict__,
-                globals=func.func_globals, closure=func.func_closure)
+                globals=func.__globals__, closure=func.__closure__)
 
 # akin to functools.update_wrapper
 def update_wrapper(wrapper, model, infodict=None):
@@ -68,14 +68,14 @@ def update_wrapper(wrapper, model, infodict=None):
     wrapper.__doc__ = infodict['doc']
     wrapper.__module__ = infodict['module']
     wrapper.__dict__.update(infodict['dict'])
-    wrapper.func_defaults = infodict['defaults']
+    wrapper.__defaults__ = infodict['defaults']
     wrapper.undecorated = model
     return wrapper
 
 def new_wrapper(wrapper, model):
     """
     An improvement over functools.update_wrapper. The wrapper is a generic
-    callable object. It works by generating a copy of the wrapper with the 
+    callable object. It works by generating a copy of the wrapper with the
     right signature and by updating the copy, not the original.
     Moreovoer, 'model' can be a dictionary with keys 'name', 'doc', 'module',
     'dict', 'defaults'.
@@ -126,17 +126,17 @@ def decorator(caller):
      def caller(func, *args, **kw):
          # do something
          return func(*args, **kw)
-    
+
     Here is an example of usage:
 
     >>> @decorator
     ... def chatty(f, *args, **kw):
-    ...     print "Calling %r" % f.__name__
+    ...     print("Calling %r" % f.__name__)
     ...     return f(*args, **kw)
 
     >>> chatty.__name__
     'chatty'
-    
+
     >>> @chatty
     ... def f(): pass
     ...
@@ -155,7 +155,7 @@ def decorator(caller):
         assert not ('_call_' in argnames or '_func_' in argnames), (
             'You cannot use _call_ or _func_ as argument names!')
         src = "lambda %(signature)s: _call_(_func_, %(signature)s)" % infodict
-        # import sys; print >> sys.stderr, src # for debugging purposes
+        # import sys; print(src, file=sys.stderr) # for debugging purposes
         dec_func = eval(src, dict(_func_=func, _call_=caller))
         return update_wrapper(dec_func, func, infodict)
     return update_wrapper(_decorator, caller)
@@ -164,13 +164,13 @@ if __name__ == "__main__":
     import doctest; doctest.testmod()
 
 ##########################     LEGALESE    ###############################
-      
-##   Redistributions of source code must retain the above copyright 
+
+##   Redistributions of source code must retain the above copyright
 ##   notice, this list of conditions and the following disclaimer.
 ##   Redistributions in bytecode form must reproduce the above copyright
 ##   notice, this list of conditions and the following disclaimer in
 ##   the documentation and/or other materials provided with the
-##   distribution. 
+##   distribution.
 
 ##   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 ##   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT

@@ -65,4 +65,3 @@ class TokenManager(KeyManager):
             token.save()
 
         return token
-        

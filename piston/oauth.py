@@ -21,12 +21,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+from six import PY2, PY3, text_type as unicode
 
-import cgi
-import urllib
+if PY3:
+    import urllib.parse as urllib
+    import urllib.parse as urlparse
+else:
+    import urllib
+    import urlparse
 import time
 import random
-import urlparse
 import hmac
 import binascii
 
@@ -53,8 +57,9 @@ def _utf8_str(s):
     """Convert unicode to utf-8."""
     if isinstance(s, unicode):
         return s.encode("utf-8")
-    else:
+    if PY2:
         return str(s)
+    return str(s).encode('utf-8')
 
 def generate_timestamp():
     """Get seconds since epoch (UTC)."""
@@ -87,7 +92,7 @@ class OAuthConsumer(object):
 class OAuthToken(object):
     """OAuthToken is a data type that represents an End User via either an access
     or request token.
-    
+
     key -- the token
     secret -- the token secret
 
@@ -133,12 +138,13 @@ class OAuthToken(object):
         if self.callback_confirmed is not None:
             data['oauth_callback_confirmed'] = self.callback_confirmed
         return urllib.urlencode(data)
- 
+
+    @staticmethod
     def from_string(s):
         """ Returns a token from something like:
         oauth_token_secret=xxx&oauth_token=xxx
         """
-        params = cgi.parse_qs(s, keep_blank_values=False)
+        params = urlparse.parse_qs(s, keep_blank_values=False)
         key = params['oauth_token'][0]
         secret = params['oauth_token_secret'][0]
         token = OAuthToken(key, secret)
@@ -147,7 +153,6 @@ class OAuthToken(object):
         except KeyError:
             pass # 1.0, no callback confirmed.
         return token
-    from_string = staticmethod(from_string)
 
     def __str__(self):
         return self.to_string()
@@ -157,11 +162,11 @@ class OAuthRequest(object):
     """OAuthRequest represents the request and can be serialized.
 
     OAuth parameters:
-        - oauth_consumer_key 
+        - oauth_consumer_key
         - oauth_token
         - oauth_signature_method
-        - oauth_signature 
-        - oauth_timestamp 
+        - oauth_signature
+        - oauth_timestamp
         - oauth_nonce
         - oauth_version
         - oauth_verifier
@@ -193,7 +198,7 @@ class OAuthRequest(object):
     def get_nonoauth_parameters(self):
         """Get any non-OAuth parameters."""
         parameters = {}
-        for k, v in self.parameters.iteritems():
+        for k, v in self.parameters.items():
             # Ignore oauth parameters.
             if k.find('oauth_') < 0:
                 parameters[k] = v
@@ -204,7 +209,7 @@ class OAuthRequest(object):
         auth_header = 'OAuth realm="%s"' % realm
         # Add the oauth parameters.
         if self.parameters:
-            for k, v in self.parameters.iteritems():
+            for k, v in self.parameters.items():
                 if k[:6] == 'oauth_':
                     auth_header += ', %s="%s"' % (k, escape(str(v)))
         return {'Authorization': auth_header}
@@ -212,7 +217,7 @@ class OAuthRequest(object):
     def to_postdata(self):
         """Serialize as post data for a POST request."""
         return '&'.join(['%s=%s' % (escape(str(k)), escape(str(v))) \
-            for k, v in self.parameters.iteritems()])
+            for k, v in self.parameters.items()])
 
     def to_url(self):
         """Serialize as a URL for a GET request."""
@@ -262,6 +267,7 @@ class OAuthRequest(object):
         """Calls the build signature method within the signature method."""
         return signature_method.build_signature(self, consumer, token)
 
+    @staticmethod
     def from_request(http_method, http_url, headers=None, parameters=None,
             query_string=None):
         """Combines multiple parameter sources."""
@@ -296,8 +302,8 @@ class OAuthRequest(object):
             return OAuthRequest(http_method, http_url, parameters)
 
         return None
-    from_request = staticmethod(from_request)
 
+    @staticmethod
     def from_consumer_and_token(oauth_consumer, token=None,
             callback=None, verifier=None, http_method=HTTP_METHOD,
             http_url=None, parameters=None):
@@ -324,8 +330,8 @@ class OAuthRequest(object):
             parameters['oauth_callback'] = callback
 
         return OAuthRequest(http_method, http_url, parameters)
-    from_consumer_and_token = staticmethod(from_consumer_and_token)
 
+    @staticmethod
     def from_token_and_callback(token, callback=None, http_method=HTTP_METHOD,
             http_url=None, parameters=None):
         if not parameters:
@@ -337,8 +343,8 @@ class OAuthRequest(object):
             parameters['oauth_callback'] = callback
 
         return OAuthRequest(http_method, http_url, parameters)
-    from_token_and_callback = staticmethod(from_token_and_callback)
 
+    @staticmethod
     def _split_header(header):
         """Turn Authorization: header into parameters."""
         params = {}
@@ -354,15 +360,14 @@ class OAuthRequest(object):
             # Remove quotes and unescape the value.
             params[param_parts[0]] = urllib.unquote(param_parts[1].strip('\"'))
         return params
-    _split_header = staticmethod(_split_header)
 
+    @staticmethod
     def _split_url_string(param_str):
         """Turn URL string into parameters."""
-        parameters = cgi.parse_qs(param_str, keep_blank_values=False)
-        for k, v in parameters.iteritems():
+        parameters = urlparse.parse_qs(param_str, keep_blank_values=False)
+        for k, v in parameters.items():
             parameters[k] = urllib.unquote(v[0])
         return parameters
-    _split_url_string = staticmethod(_split_url_string)
 
 class OAuthServer(object):
     """A worker to check the validity of a request against a data store."""
@@ -436,7 +441,7 @@ class OAuthServer(object):
     def get_callback(self, oauth_request):
         """Get the callback URL."""
         return oauth_request.get_parameter('oauth_callback')
- 
+
     def build_authenticate_header(self, realm=''):
         """Optional support for the authenticate header."""
         return {'WWW-Authenticate': 'OAuth realm="%s"' % realm}
@@ -482,7 +487,7 @@ class OAuthServer(object):
         if not token:
             raise OAuthError('Invalid %s token: %s' % (token_type, token_field))
         return token
-    
+
     def _get_verifier(self, oauth_request):
         return oauth_request.get_parameter('oauth_verifier')
 
@@ -601,7 +606,7 @@ class OAuthSignatureMethod_HMAC_SHA1(OAuthSignatureMethod):
 
     def get_name(self):
         return 'HMAC-SHA1'
-        
+
     def build_signature_base_string(self, oauth_request, consumer, token):
         sig = (
             escape(oauth_request.get_normalized_http_method()),
@@ -621,15 +626,16 @@ class OAuthSignatureMethod_HMAC_SHA1(OAuthSignatureMethod):
             token)
 
         # HMAC object.
-        try:
-            import hashlib # 2.5
-            hashed = hmac.new(key, raw, hashlib.sha1)
-        except:
-            import sha # Deprecated
-            hashed = hmac.new(key, raw, sha)
+        import hashlib
+        #PY3: hmac doesn't work with str
+        key = key.encode('ascii')
+        raw = raw.encode('ascii')
+        hashed = hmac.new(key, raw, hashlib.sha1)
 
         # Calculate the digest base 64.
-        return binascii.b2a_base64(hashed.digest())[:-1]
+        signature = binascii.b2a_base64(hashed.digest())[:-1]
+        #PY3: decode to get str
+        return signature.decode('ascii')
 
 
 class OAuthSignatureMethod_PLAINTEXT(OAuthSignatureMethod):

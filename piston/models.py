@@ -1,14 +1,24 @@
-import urllib, time, urlparse
+from six import PY3
+
+import time
+
+if PY3:
+    import urllib.parse as urllib
+    import urllib.parse as urlparse
+else:
+    import urllib
+    import urlparse
 
 # Django imports
+from django.conf import settings
 from django.db.models.signals import post_save, post_delete
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.mail import send_mail, mail_admins
 
 # Piston imports
-from managers import TokenManager, ConsumerManager, ResourceManager
-from signals import consumer_post_save, consumer_post_delete
+from .managers import TokenManager, ConsumerManager, ResourceManager
+from .signals import consumer_post_save, consumer_post_delete
 
 KEY_SIZE = 18
 SECRET_SIZE = 32
@@ -21,14 +31,22 @@ CONSUMER_STATES = (
     ('rejected', 'Rejected')
 )
 
+AUTH_USER_MODEL = getattr(settings, 'AUTH_USER_MODEL', User)
+
+
 def generate_random(length=SECRET_SIZE):
     return User.objects.make_random_password(length=length)
+
+
+def get_default_timestamp():
+    return int(time.time())
+
 
 class Nonce(models.Model):
     token_key = models.CharField(max_length=KEY_SIZE)
     consumer_key = models.CharField(max_length=KEY_SIZE)
     key = models.CharField(max_length=255)
-    
+
     def __unicode__(self):
         return u"Nonce %s for %s" % (self.key, self.consumer_key)
 
@@ -41,10 +59,11 @@ class Consumer(models.Model):
     secret = models.CharField(max_length=SECRET_SIZE)
 
     status = models.CharField(max_length=16, choices=CONSUMER_STATES, default='pending')
-    user = models.ForeignKey(User, null=True, blank=True, related_name='consumers')
+    user = models.ForeignKey(AUTH_USER_MODEL,
+                             null=True, blank=True, related_name='consumers')
 
     objects = ConsumerManager()
-        
+
     def __unicode__(self):
         return u"Consumer %s with key %s" % (self.name, self.key)
 
@@ -74,34 +93,35 @@ class Token(models.Model):
     REQUEST = 1
     ACCESS = 2
     TOKEN_TYPES = ((REQUEST, u'Request'), (ACCESS, u'Access'))
-    
+
     key = models.CharField(max_length=KEY_SIZE)
     secret = models.CharField(max_length=SECRET_SIZE)
     verifier = models.CharField(max_length=VERIFIER_SIZE)
     token_type = models.IntegerField(choices=TOKEN_TYPES)
-    timestamp = models.IntegerField(default=long(time.time()))
+    timestamp = models.IntegerField(default=get_default_timestamp)
     is_approved = models.BooleanField(default=False)
-    
-    user = models.ForeignKey(User, null=True, blank=True, related_name='tokens')
+
+    user = models.ForeignKey(AUTH_USER_MODEL,
+                             null=True, blank=True, related_name='tokens')
     consumer = models.ForeignKey(Consumer)
-    
+
     callback = models.CharField(max_length=255, null=True, blank=True)
     callback_confirmed = models.BooleanField(default=False)
-    
+
     objects = TokenManager()
-    
+
     def __unicode__(self):
         return u"%s Token %s for %s" % (self.get_token_type_display(), self.key, self.consumer)
 
     def to_string(self, only_key=False):
         token_dict = {
-            'oauth_token': self.key, 
+            'oauth_token': self.key,
             'oauth_token_secret': self.secret,
             'oauth_callback_confirmed': 'true',
         }
 
         if self.verifier:
-            token_dict.update({ 'oauth_verifier': self.verifier })
+            token_dict.update({'oauth_verifier': self.verifier})
 
         if only_key:
             del token_dict['oauth_token_secret']
@@ -118,7 +138,7 @@ class Token(models.Model):
         self.key = key
         self.secret = secret
         self.save()
-        
+
     # -- OAuth 1.0a stuff
 
     def get_callback_url(self):
@@ -131,11 +151,11 @@ class Token(models.Model):
             else:
                 query = 'oauth_verifier=%s' % self.verifier
             return urlparse.urlunparse((scheme, netloc, path, params,
-                query, fragment))
+                                        query, fragment))
         return self.callback
-    
+
     def set_callback(self, callback):
-        if callback != "oob": # out of band, says "we can't do this!"
+        if callback != "oob":  # out of band, says "we can't do this!"
             self.callback = callback
             self.callback_confirmed = True
             self.save()
